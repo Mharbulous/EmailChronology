@@ -93,9 +93,9 @@ export class EmailChain {
         // Group emails by source file
         const groupedEmails = this.groupBySourceFile(sortedEmails);
 
-        // Render each group
-        groupedEmails.forEach(group => {
-            const groupEl = this.createFileGroupElement(group);
+        // Render each group with alternating alignment
+        groupedEmails.forEach((group, index) => {
+            const groupEl = this.createFileGroupElement(group, index);
             this.container.appendChild(groupEl);
         });
     }
@@ -131,11 +131,14 @@ export class EmailChain {
     /**
      * Create a file group element (paper sheet container)
      * @param {Object} group - Group object with sourceFile and emails array
+     * @param {number} index - Index of the group for alternating alignment
      * @returns {HTMLElement} Group element
      */
-    createFileGroupElement(group) {
+    createFileGroupElement(group, index) {
         const groupDiv = document.createElement('div');
-        groupDiv.className = 'file-group';
+        // Alternate between left and right alignment
+        const alignmentClass = index % 2 === 0 ? 'file-group-left' : 'file-group-right';
+        groupDiv.className = `file-group ${alignmentClass}`;
 
         // Add source filename header
         const headerDiv = document.createElement('div');
