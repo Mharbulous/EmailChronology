@@ -4,6 +4,8 @@
 
 QuickChain is a web application that allows users to view email chains from `.msg` files in chronological order. It provides a drag-and-drop interface for loading Outlook message files and displays them in a clean, chronological view with full headers, body content, and attachment information.
 
+**Key Capability**: QuickChain intelligently parses forwarded email threads and automatically splits them into individual email cards, even when multiple messages are contained within a single `.msg` file. Emails are then grouped by source file with alternating left/right alignment (paper sheet effect) for visual distinction.
+
 ## Technology Stack
 
 - **Frontend**: Vanilla JavaScript (ES6 modules)
@@ -45,16 +47,22 @@ QuickChain/
 2. **emailChain.js** (`EmailChain` class)
    - Manages the collection of emails using a Map for deduplication
    - Sorts emails chronologically (earliest first)
-   - Renders email cards with headers, body, and attachments
+   - Groups emails by source file (`.msg` filename) for display
+   - Renders email groups with alternating left/right alignment (paper sheet effect)
+   - Renders individual email cards with headers, body, and attachments
    - Handles XSS prevention via HTML escaping
    - Toggles UI between empty state and email list
 
 3. **msgParser.js**
-   - Uses `@kenjiuno/msgreader` library
-   - Parses .msg files and extracts metadata
-   - Converts HTML body to plain text
-   - Handles attachments and nested .msg files
-   - Returns standardized email objects
+   - Uses `@kenjiuno/msgreader` library to parse .msg file format
+   - Extracts email metadata (from, to, cc, date, subject, body, attachments)
+   - **Thread Parser**: Intelligently detects and splits forwarded email chains into individual messages
+   - Identifies message boundaries using patterns like "From:", "On [date]...wrote:", and separator lines
+   - Parses multi-line email headers from forwarded messages
+   - Handles various date formats (Outlook-style, ISO, flexible parsing)
+   - Converts HTML body to plain text for display
+   - Tracks source filename for each extracted email
+   - Returns array of standardized email objects (one or more per `.msg` file)
 
 4. **queue.js** (`ProcessingQueue` class)
    - Manages asynchronous file processing queue
@@ -71,10 +79,14 @@ QuickChain/
 ### Key Features
 
 - **Drag & Drop**: Users can drop .msg files anywhere in the app
+- **Email Thread Parsing**: Automatically detects and splits forwarded email chains into individual cards
 - **Chronological Ordering**: Emails sorted by send time (earliest first)
+- **Source File Grouping**: Emails grouped by `.msg` file with alternating left/right paper sheet alignment
 - **Duplicate Detection**: Uses combination of date, subject, from, and body preview as unique identifier
 - **Processing Queue**: Visual feedback for multiple file uploads
 - **Full Headers**: Displays From, To, Cc, Date, and Subject
+- **Multi-line Header Support**: Correctly parses headers that span multiple lines in forwarded emails
+- **Flexible Date Parsing**: Handles various date formats (Outlook, ISO, natural language)
 - **Attachment List**: Shows attachment names (files not extracted)
 - **Plain Text Display**: HTML emails converted to plain text
 - **Error Handling**: Toast notifications for parsing errors
@@ -128,6 +140,43 @@ This ensures the live app displays the correct version information to users in P
 
 ## Important Implementation Details
 
+### Email Thread Parsing
+The `parseForwardedChain()` function in `msgParser.js` analyzes email body text to detect forwarded email chains:
+
+1. **Boundary Detection** (`identifyMessageBoundaries()`)
+   - Looks for "From:" lines followed by other headers (To/Date/Cc/Subject)
+   - Detects "On [date]...wrote:" patterns
+   - Identifies separator lines (20+ underscores/dashes)
+   - Returns array of character positions where messages start
+
+2. **Email Extraction** (`extractEmailFromSection()`)
+   - Parses headers (From, To, Cc, Date/Sent, Subject) from each section
+   - Handles multi-line headers (e.g., long recipient lists)
+   - Extracts body content after headers
+   - Returns null if insufficient metadata found
+
+3. **Fallback Behavior**
+   - If thread parsing fails or finds only one message, returns original email
+   - If parsing succeeds with 2+ messages, returns array of individual emails
+   - All extracted emails tagged with `sourceFile` property
+
+### Source File Grouping & Visual Layout
+The `groupBySourceFile()` method in `emailChain.js` organizes emails:
+```javascript
+// Groups emails by sourceFile while maintaining chronological order
+const groups = [];
+sortedEmails.forEach(email => {
+    const sourceFile = email.sourceFile || 'Unknown';
+    // Track first occurrence order, group emails by file
+});
+```
+
+Each group is rendered with:
+- Alternating `file-group-left` / `file-group-right` classes (based on index)
+- Source filename header at the top
+- Individual email cards within the group
+- Paper sheet visual effect with borders and shadows
+
 ### Email Deduplication
 Emails are deduplicated using a composite key:
 ```javascript
@@ -149,6 +198,13 @@ emailArray.sort((a, b) => {
 });
 ```
 
+### Flexible Date Parsing
+The `parseFlexibleDate()` and `parseOutlookDate()` functions handle various formats:
+- Standard ISO dates
+- Outlook format: "Thursday, January 9, 2025 7:06 PM"
+- Dates with day-of-week prefixes: "Mon, Jan 6, 2025, 9:26 AM"
+- Attempts multiple parsing strategies before giving up
+
 ### Node.js Polyfills
 Required for `@kenjiuno/msgreader` to work in browser:
 - Buffer
@@ -161,9 +217,11 @@ These are provided by `vite-plugin-node-polyfills` configured in `vite.config.js
 
 1. **Empty State**: Large drop zone shown when no emails loaded
 2. **Active State**: Email list with smaller drag overlay
-3. **Queue Feedback**: Visual indicator showing processing status
-4. **Toast Notifications**: Non-intrusive error messages
-5. **Confirmation Dialogs**: Used for destructive actions (Clear All)
+3. **Paper Sheet Effect**: Visual grouping with alternating left/right alignment for source files
+4. **Queue Feedback**: Visual indicator showing processing status and current/next file
+5. **Toast Notifications**: Non-intrusive error messages (e.g., duplicate emails, parsing errors)
+6. **Confirmation Dialogs**: Used for destructive actions (Clear All)
+7. **Commit Date Display**: Shows version info in PST in header
 
 ## Common Tasks
 
@@ -174,12 +232,19 @@ These are provided by `vite-plugin-node-polyfills` configured in `vite.config.js
 4. Test with multiple .msg files
 
 ### Modifying Email Display
-- Edit `emailChain.js` methods: `createEmailElement`, `createHeaderHtml`, `createBodyHtml`, `createAttachmentsHtml`
-- Update corresponding CSS in `css/styles.css`
+- Edit `emailChain.js` methods:
+  - `createFileGroupElement()` - Controls group layout and alignment
+  - `createEmailElement()` - Creates individual email cards
+  - `createHeaderHtml()`, `createBodyHtml()`, `createAttachmentsHtml()` - Email content
+- Update corresponding CSS in `css/styles.css`:
+  - `.file-group`, `.file-group-left`, `.file-group-right` - Group styling
+  - `.email-item` - Individual email card styling
 
 ### Changing Parsing Logic
 - Modify `msgParser.js`
-- Ensure returned email object maintains expected structure: `{ from, to, cc, date, subject, body, attachments }`
+- For basic email parsing: Edit `parseMsgFile()` function
+- For thread parsing: Edit `parseForwardedChain()`, `identifyMessageBoundaries()`, `extractEmailFromSection()`
+- Ensure returned email objects maintain expected structure: `{ from, to, cc, date, subject, body, attachments, sourceFile }`
 
 ### Adjusting Queue Behavior
 - Edit `queue.js` ProcessingQueue class
@@ -191,6 +256,8 @@ These are provided by `vite-plugin-node-polyfills` configured in `vite.config.js
 2. **HTML Rendering**: HTML emails converted to plain text (no rich formatting)
 3. **Large Files**: No progress bar for individual large .msg files
 4. **Browser Support**: Requires modern browser with ES6 module support
+5. **Thread Parsing Accuracy**: Depends on recognizing common email patterns; may not detect all forwarded email formats
+6. **Date Parsing**: Some unusual date formats may not be recognized and will show as "Unknown Date"
 
 ## Testing Considerations
 
@@ -201,6 +268,12 @@ These are provided by `vite-plugin-node-polyfills` configured in `vite.config.js
 - Test with invalid files to verify error handling
 - Test with multiple files in queue
 - Test drag-and-drop in both empty and active states
+- **Test with forwarded email chains** to verify thread parsing
+- **Test with emails containing "From:" in body text** to ensure false positives are handled
+- **Test with multi-line headers** (long recipient lists, wrapped subjects)
+- **Test with various date formats** (Outlook, ISO, natural language)
+- **Test grouping and alignment** - verify alternating left/right layout
+- **Test duplicate detection within parsed threads** - same message forwarded multiple times
 
 ## Deployment
 
