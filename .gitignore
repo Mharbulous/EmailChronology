@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
+# Build output (uncomment dist/ to commit built files for GitHub Pages)
+# dist/
 
 # Environment variables
 .env
