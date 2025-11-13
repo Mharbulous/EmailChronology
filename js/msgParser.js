@@ -175,7 +175,7 @@ function extractAttachments(attachments) {
 
 /**
  * Parse forwarded email chain from email body
- * Detects Outlook-style forwarded emails and extracts individual messages
+ * Detects email threads and extracts individual messages
  * @param {Object} email - Email object with body text
  * @param {string} sourceFile - Name of the source .msg file
  * @returns {Array<Object>} Array of individual email objects, or empty array if not a chain
@@ -187,28 +187,28 @@ function parseForwardedChain(email, sourceFile) {
 
     const body = email.body;
 
-    // Check if this looks like a forwarded email chain
-    // Outlook uses separator lines (underscores) and headers like "From:", "Sent:", "To:", "Subject:"
-    const hasOutlookSeparator = /_{20,}/.test(body);
-    const hasForwardedHeaders = /^(From|Sent):/m.test(body);
+    // Find all message boundaries in the email body
+    const boundaries = identifyMessageBoundaries(body);
 
-    if (!hasOutlookSeparator && !hasForwardedHeaders) {
-        // Not a forwarded chain, return empty array
+    // If no boundaries found, this is not a chain
+    if (boundaries.length === 0) {
         return [];
     }
 
-    // Split by Outlook separator lines
-    const sections = body.split(/_{20,}/);
     const emails = [];
 
-    for (const section of sections) {
-        const trimmedSection = section.trim();
-        if (!trimmedSection) continue;
+    // Extract each message section
+    for (let i = 0; i < boundaries.length; i++) {
+        const startPos = boundaries[i];
+        const endPos = i < boundaries.length - 1 ? boundaries[i + 1] : body.length;
+        const section = body.substring(startPos, endPos).trim();
+
+        if (!section) continue;
 
         // Try to extract email metadata from this section
-        const extractedEmail = extractEmailFromSection(trimmedSection);
+        const extractedEmail = extractEmailFromSection(section);
         if (extractedEmail) {
-            extractedEmail.sourceFile = sourceFile;  // Add source file to each extracted email
+            extractedEmail.sourceFile = sourceFile;
             emails.push(extractedEmail);
         }
     }
@@ -219,7 +219,55 @@ function parseForwardedChain(email, sourceFile) {
 }
 
 /**
+ * Identify all message boundaries in an email body
+ * Looks for patterns like "From:", "On [date] ... wrote:", and separator lines
+ * @param {string} body - Email body text
+ * @returns {Array<number>} Array of character positions where messages start
+ */
+function identifyMessageBoundaries(body) {
+    const boundaries = [];
+    const lines = body.split('\n');
+    let charPosition = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        // Pattern 1: "From:" at start of line (common email header)
+        // Make sure there's content after "From:" and check next few lines for other headers
+        if (/^From:\s*\S/i.test(trimmedLine)) {
+            // Look ahead to see if this is followed by To:/Date:/Cc: within next 5 lines
+            const hasOtherHeaders = lines.slice(i + 1, i + 6).some(nextLine =>
+                /^(To|Date|Sent|Cc|Subject):/i.test(nextLine.trim())
+            );
+
+            if (hasOtherHeaders || boundaries.length === 0) {
+                boundaries.push(charPosition);
+            }
+        }
+
+        // Pattern 2: "On [date] ... wrote:" (reply/forward indicator)
+        // Examples: "On Jul 11, 2025, at 11:22 AM, CENTERLANE TOWING <email> wrote:"
+        if (/^On\s+.+\s+wrote:\s*$/i.test(trimmedLine)) {
+            boundaries.push(charPosition);
+        }
+
+        // Pattern 3: Separator lines (20+ underscores or dashes)
+        if (/^[_-]{20,}$/.test(trimmedLine)) {
+            // The message starts after the separator
+            boundaries.push(charPosition + line.length + 1);
+        }
+
+        // Update character position (add line length + newline)
+        charPosition += line.length + 1;
+    }
+
+    return boundaries;
+}
+
+/**
  * Extract email metadata from a forwarded email section
+ * Handles multi-line headers and various formats
  * @param {string} section - Text section containing one email
  * @returns {Object|null} Email object or null if parsing fails
  */
@@ -235,76 +283,144 @@ function extractEmailFromSection(section) {
         attachments: []
     };
 
-    let bodyStartIndex = 0;
+    let i = 0;
     let foundHeaders = false;
+    let lastHeaderType = null;
 
-    // Parse headers (From, Sent/Date, To, Cc, Subject)
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
+    // Skip "On ... wrote:" line if present
+    if (lines[0] && /^On\s+.+\s+wrote:\s*$/i.test(lines[0].trim())) {
+        i = 1;
+    }
 
-        // Match "From: Name <email>" or "From: email"
-        if (/^From:/i.test(line)) {
-            email.from = line.replace(/^From:\s*/i, '').trim();
-            foundHeaders = true;
-            bodyStartIndex = i + 1;
-            continue;
-        }
+    // Parse headers - can be multi-line
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
 
-        // Match "Sent: Date" (Outlook format)
-        if (/^Sent:/i.test(line)) {
-            const dateStr = line.replace(/^Sent:\s*/i, '').trim();
-            email.date = parseOutlookDate(dateStr);
-            bodyStartIndex = i + 1;
-            continue;
-        }
+        // Check if this line starts a new header
+        const headerMatch = trimmedLine.match(/^(From|To|Cc|Date|Sent|Subject):\s*(.*)/i);
 
-        // Match "Date: Date" (alternative format)
-        if (/^Date:/i.test(line)) {
-            const dateStr = line.replace(/^Date:\s*/i, '').trim();
-            email.date = parseDate(dateStr);
-            bodyStartIndex = i + 1;
-            continue;
-        }
+        if (headerMatch) {
+            const headerType = headerMatch[1].toLowerCase();
+            let headerValue = headerMatch[2].trim();
 
-        // Match "To: recipients"
-        if (/^To:/i.test(line)) {
-            email.to = line.replace(/^To:\s*/i, '').trim();
-            bodyStartIndex = i + 1;
-            continue;
-        }
+            // If the header value is empty or very short, check next lines
+            if (!headerValue || headerValue.length < 3) {
+                i++;
+                // Collect continuation lines until we hit another header or empty line
+                while (i < lines.length) {
+                    const nextLine = lines[i].trim();
+                    if (!nextLine || /^(From|To|Cc|Date|Sent|Subject):/i.test(nextLine)) {
+                        break;
+                    }
+                    headerValue += (headerValue ? ' ' : '') + nextLine;
+                    i++;
+                }
+                i--; // Step back one since we'll increment at the end
+            }
 
-        // Match "Cc: recipients"
-        if (/^Cc:/i.test(line)) {
-            email.cc = line.replace(/^Cc:\s*/i, '').trim();
-            bodyStartIndex = i + 1;
-            continue;
-        }
+            // Clean up the header value
+            headerValue = cleanEmailText(headerValue);
 
-        // Match "Subject: subject"
-        if (/^Subject:/i.test(line)) {
-            email.subject = line.replace(/^Subject:\s*/i, '').trim();
-            bodyStartIndex = i + 1;
-            continue;
-        }
+            // Store the header value
+            switch (headerType) {
+                case 'from':
+                    email.from = headerValue;
+                    foundHeaders = true;
+                    break;
+                case 'to':
+                    email.to = headerValue;
+                    break;
+                case 'cc':
+                    email.cc = headerValue;
+                    break;
+                case 'date':
+                case 'sent':
+                    email.date = parseFlexibleDate(headerValue);
+                    break;
+                case 'subject':
+                    email.subject = headerValue;
+                    break;
+            }
 
-        // If we've found headers and hit a non-header line, start body
-        if (foundHeaders && line && !/^(From|Sent|Date|To|Cc|Subject):/i.test(line)) {
-            bodyStartIndex = i;
+            lastHeaderType = headerType;
+        } else if (foundHeaders && !trimmedLine) {
+            // Empty line after headers means body starts next
+            i++;
             break;
+        } else if (foundHeaders && !/^(From|To|Cc|Date|Sent|Subject):/i.test(trimmedLine)) {
+            // Non-header line after we've found headers
+            // Could be the subject (if no Subject: label found) or start of body
+            if (!email.subject && trimmedLine && trimmedLine.length < 200) {
+                // Likely a subject line without "Subject:" label
+                email.subject = trimmedLine;
+            } else {
+                // Start of body
+                break;
+            }
         }
+
+        i++;
     }
 
     // Extract body (everything after headers)
-    if (bodyStartIndex < lines.length) {
-        email.body = lines.slice(bodyStartIndex).join('\n').trim();
+    if (i < lines.length) {
+        email.body = lines.slice(i).join('\n').trim();
     }
 
-    // Only return if we found at least a sender and date
-    if (email.from && email.date) {
+    // Only return if we found at least a sender or a date
+    if ((email.from || email.to) && (email.date || email.subject)) {
         return email;
     }
 
     return null;
+}
+
+/**
+ * Clean email text by removing mailto: links and extra whitespace
+ * @param {string} text - Text to clean
+ * @returns {string} Cleaned text
+ */
+function cleanEmailText(text) {
+    if (!text) return '';
+
+    // Remove mailto: links - pattern: <mailto:email>
+    text = text.replace(/<mailto:([^>]+)>/g, '');
+
+    // Remove duplicate email addresses in angle brackets if they appear twice
+    // Example: "email <email>" -> "email"
+    text = text.replace(/(\S+@\S+)\s+<\1>/g, '$1');
+
+    // Clean up extra spaces
+    text = text.replace(/\s+/g, ' ').trim();
+
+    return text;
+}
+
+/**
+ * Parse dates in various formats
+ * Handles: "Mon, Jan 6, 2025, 9:26 AM", "January 9, 2025 7:06 PM", etc.
+ * @param {string} dateStr - Date string
+ * @returns {Date|null} Parsed date or null
+ */
+function parseFlexibleDate(dateStr) {
+    if (!dateStr) return null;
+
+    // Try standard parsing first
+    let parsed = new Date(dateStr);
+    if (!isNaN(parsed)) {
+        return parsed;
+    }
+
+    // Try removing day of week prefix (Mon, Tuesday, etc.)
+    const withoutDay = dateStr.replace(/^[A-Za-z]+,\s*/, '');
+    parsed = new Date(withoutDay);
+    if (!isNaN(parsed)) {
+        return parsed;
+    }
+
+    // Try parsing Outlook-style format
+    return parseOutlookDate(dateStr);
 }
 
 /**
