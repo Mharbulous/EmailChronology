@@ -1,5 +1,5 @@
 {
-  "name": "quickchain",
+  "name": "Email Chronology",
   "version": "1.0.0",
   "description": "Email chain viewer for .msg files",
   "type": "module",

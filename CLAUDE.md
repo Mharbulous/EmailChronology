@@ -1,8 +1,8 @@
-# QuickChain - Project Context for Claude
+# Email Chronology - Project Context for Claude
 
 ## Project Overview
 
-**QuickChain** is a web application that parses long email chains from `.msg` (Outlook message) files into individual email messages, then displays them in chronological order with alternating left/right alignment in a scrollable timeline view.
+**Email Chronology** is a web application that parses long email chains from `.msg` (Outlook message) files into individual email messages, then displays them in chronological order with alternating left/right alignment in a scrollable timeline view.
 
 ### Core Purpose
 
@@ -27,7 +27,7 @@ This allows users to view complex, forwarded email chains as a clean, chronologi
 ## Project Structure
 
 ```
-QuickChain/
+Email Chronology/
 ├── index.html              # Main HTML file with app structure
 ├── package.json            # Dependencies and scripts
 ├── vite.config.js          # Vite configuration with Node polyfills
@@ -72,7 +72,7 @@ QuickChain/
 
 ### Module Responsibilities
 
-#### 1. **app.js** (`QuickChainApp` class)
+#### 1. **app.js** (`Email ChronologyApp` class)
 Main application controller that orchestrates the entire app.
 
 **Responsibilities:**
@@ -342,7 +342,7 @@ npm run preview      # Preview production build
 This ensures the live app displays the correct version information to users in Pacific Standard Time.
 
 ### Build Configuration
-- Base path: `/QuickChain/` (configured for GitHub Pages)
+- Base path: `/Email Chronology/` (configured for GitHub Pages)
 - Output directory: `dist/`
 - Development server runs on port 3000
 - Auto-opens browser on dev server start
@@ -527,7 +527,7 @@ These are provided by `vite-plugin-node-polyfills` configured in `vite.config.js
 
 ### GitHub Pages Setup
 
-The app is configured for GitHub Pages with base path `/QuickChain/`.
+The app is configured for GitHub Pages with base path `/Email Chronology/`.
 
 **Automatic Deployment:**
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically builds and deploys the app when changes are pushed to the `main` branch.

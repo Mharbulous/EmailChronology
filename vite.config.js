@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
-  base: '/QuickChain/',
+  base: '/Email Chronology/',
   plugins: [
     nodePolyfills({
       // Enable polyfills for specific globals and modules

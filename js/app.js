@@ -1,5 +1,5 @@
 /**
- * QuickChain - Main Application
+ * Email Chronology - Main Application
  * Email chain viewer for .msg files
  */
 
@@ -8,7 +8,7 @@ import { ProcessingQueue } from './queue.js';
 import { EmailChain } from './emailChain.js';
 import { parseMsgFile } from './msgParser.js';
 
-class QuickChainApp {
+class Email ChronologyApp {
     constructor() {
         this.emailChain = new EmailChain();
         this.queue = new ProcessingQueue(this.processFile.bind(this));
@@ -211,8 +211,8 @@ class QuickChainApp {
 // Initialize app when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        new QuickChainApp();
+        new Email ChronologyApp();
     });
 } else {
-    new QuickChainApp();
+    new Email ChronologyApp();
 }

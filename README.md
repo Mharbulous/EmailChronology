@@ -1,4 +1,4 @@
-# QuickChain
+# Email Chronology
 
 A simple web application for viewing email chains from `.msg` files in chronological order.
 
