@@ -49,14 +49,8 @@ class EmailChronologyApp {
             e.target.value = '';
         });
 
-        // Prevent default drag behavior on document
-        document.addEventListener('dragover', (e) => {
-            e.preventDefault();
-        });
-
-        document.addEventListener('drop', (e) => {
-            e.preventDefault();
-        });
+        // Note: Document-level preventDefault is now in index.html inline script
+        // This ensures it runs synchronously before modules load (critical for production)
     }
 
     /**
