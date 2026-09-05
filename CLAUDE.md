@@ -330,16 +330,7 @@ npm run preview      # Preview production build
 ```
 
 ### Committing Changes
-**IMPORTANT**: Before every commit and push, you MUST update the commit date in `index.html`:
-
-1. Get the current date/time in PST (Pacific Standard Time - Vancouver, BC) using:
-   ```bash
-   TZ='America/Vancouver' git log -1 --format="%cd" --date=format:"%I:%M%p on %B %d, %Y"
-   ```
-2. Update the commit date in the `.commit-date` div in `index.html` (around line 16)
-3. Format: "Commit date: HH:MM(AM/PM) on Month DD, YYYY" (in PST)
-
-This ensures the live app displays the correct version information to users in Pacific Standard Time.
+The pre-commit hook in `.githooks/` stamps the commit date into `index.html` (Pacific time). Run `git config core.hooksPath .githooks` once after cloning.
 
 ### Build Configuration
 - Base path: `/Email Chronology v1.0.3/` (configured for GitHub Pages)

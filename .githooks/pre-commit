@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Stamp the commit date shown in index.html (Pacific time) on every commit.
+set -e
+stamp=$(TZ='America/Vancouver' date +"%I:%M%p on %B %d, %Y")
+sed -i -E "s#(<div class=\"commit-date\">)[^<]*#\1Commit date: ${stamp}#" index.html
+git add index.html
